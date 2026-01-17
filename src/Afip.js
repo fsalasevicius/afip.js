@@ -16,6 +16,8 @@ const RegisterScopeFive = require("./Class/RegisterScopeFive");
 const RegisterInscriptionProof = require("./Class/RegisterInscriptionProof");
 const RegisterScopeTen = require("./Class/RegisterScopeTen");
 const RegisterScopeThirteen = require("./Class/RegisterScopeThirteen");
+const WSCpe = require("./Class/WSCpe");
+const WSLpg = require("./Class/WSLpg");
 
 /**
  * Software Development Kit for ARCA/AFIP web services (direct WSAA, no proxy)
@@ -30,7 +32,7 @@ const xmlParser = new xml2js.Parser({
   normalize: true,
   explicitArray: false,
   attrkey: "header",
-  tagNameProcessors: [key => String(key || "").replace("soapenv:", "")]
+  tagNameProcessors: [(key) => String(key || "").replace("soapenv:", "")],
 });
 
 function isFile(p) {
@@ -53,11 +55,15 @@ function resolveDefaultCertKeyPaths({ production }) {
   const keyEnv = process.env.AFIP_KEY_PATH;
 
   // fallback: platform por ambiente (si querés usarlo así también)
-  const certPlat = production ? process.env.PLATFORM_AFIP_CERT_PROD_PATH : process.env.PLATFORM_AFIP_CERT_HOMO_PATH;
-  const keyPlat  = production ? process.env.PLATFORM_AFIP_KEY_PROD_PATH  : process.env.PLATFORM_AFIP_KEY_HOMO_PATH;
+  const certPlat = production
+    ? process.env.PLATFORM_AFIP_CERT_PROD_PATH
+    : process.env.PLATFORM_AFIP_CERT_HOMO_PATH;
+  const keyPlat = production
+    ? process.env.PLATFORM_AFIP_KEY_PROD_PATH
+    : process.env.PLATFORM_AFIP_KEY_HOMO_PATH;
 
   const cert = ensureAbsFromCwd(certEnv || certPlat);
-  const key  = ensureAbsFromCwd(keyEnv || keyPlat);
+  const key = ensureAbsFromCwd(keyEnv || keyPlat);
 
   return { cert, key };
 }
@@ -77,8 +83,10 @@ function Afip(options = {}) {
   if (!options.hasOwnProperty("key")) options.key = undefined;
 
   // WSDL y TA folder
-  if (!options.hasOwnProperty("wsaa_wsdl")) options.wsaa_wsdl = path.resolve(__dirname, "Afip_res", "wsaa.wsdl");
-  if (!options.hasOwnProperty("ta_folder")) options.ta_folder = path.resolve(__dirname, "Afip_res");
+  if (!options.hasOwnProperty("wsaa_wsdl"))
+    options.wsaa_wsdl = path.resolve(__dirname, "Afip_res", "wsaa.wsdl");
+  if (!options.hasOwnProperty("ta_folder"))
+    options.ta_folder = path.resolve(__dirname, "Afip_res");
 
   // Validaciones mínimas
   if (!options.CUIT) throw new Error("CUIT field is required in options array");
@@ -105,8 +113,8 @@ function Afip(options = {}) {
     // Nota: acá exigimos ARCHIVO porque tu caso es por .env con rutas
     throw new Error(
       "Cert/key no configurados o no existen. " +
-      "Seteá options.cert/options.key o AFIP_CERT_PATH/AFIP_KEY_PATH (y/o PLATFORM_AFIP_*_PATH). " +
-      `cert=${certPath || "null"} key=${keyPath || "null"}`
+        "Seteá options.cert/options.key o AFIP_CERT_PATH/AFIP_KEY_PATH (y/o PLATFORM_AFIP_*_PATH). " +
+        `cert=${certPath || "null"} key=${keyPath || "null"}`,
     );
   }
 
@@ -138,6 +146,8 @@ function Afip(options = {}) {
   this.RegisterInscriptionProof = new RegisterInscriptionProof(this);
   this.RegisterScopeTen = new RegisterScopeTen(this);
   this.RegisterScopeThirteen = new RegisterScopeThirteen(this);
+  this.CPE = new WSCpe(this);
+  this.LPG = new WSLpg(this);
 }
 
 /**
@@ -145,7 +155,10 @@ function Afip(options = {}) {
  */
 Afip.prototype._taFilePath = function (service) {
   const suffix = this.options.production ? "-production" : "";
-  return path.resolve(this.TA_FOLDER, `TA-${this.options.CUIT}-${service}${suffix}.json`);
+  return path.resolve(
+    this.TA_FOLDER,
+    `TA-${this.options.CUIT}-${service}${suffix}.json`,
+  );
 };
 
 /**
@@ -164,13 +177,13 @@ Afip.prototype.GetServiceTA = async function (service, force = false) {
       // ventana de 10 min como el SDK viejo
       const actualTime = new Date(Date.now() + 600000);
       const expirationTime = new Date(
-        taData?.header?.expirationtime || taData?.header?.expirationTime
+        taData?.header?.expirationtime || taData?.header?.expirationTime,
       );
 
       if (actualTime < expirationTime) {
         return {
           token: taData.credentials.token,
-          sign: taData.credentials.sign
+          sign: taData.credentials.sign,
         };
       }
     } catch (_) {
@@ -184,7 +197,7 @@ Afip.prototype.GetServiceTA = async function (service, force = false) {
   const taData = JSON.parse(fs.readFileSync(taFilePath, "utf8"));
   return {
     token: taData.credentials.token,
-    sign: taData.credentials.sign
+    sign: taData.credentials.sign,
   };
 };
 
@@ -194,7 +207,7 @@ Afip.prototype.GetServiceTA = async function (service, force = false) {
 Afip.prototype.CreateServiceTA = async function (service) {
   const date = new Date();
 
-  const tra = (`<?xml version="1.0" encoding="UTF-8" ?>
+  const tra = `<?xml version="1.0" encoding="UTF-8" ?>
 <loginTicketRequest version="1.0">
   <header>
     <uniqueId>${Math.floor(date.getTime() / 1000)}</uniqueId>
@@ -202,7 +215,7 @@ Afip.prototype.CreateServiceTA = async function (service) {
     <expirationTime>${new Date(date.getTime() + 600000).toISOString()}</expirationTime>
   </header>
   <service>${service}</service>
-</loginTicketRequest>`).trim();
+</loginTicketRequest>`.trim();
 
   // Leer PEMs desde ARCHIVO
   const certPem = fs.readFileSync(this.CERT, { encoding: "utf8" });
@@ -220,11 +233,11 @@ Afip.prototype.CreateServiceTA = async function (service) {
     authenticatedAttributes: [
       { type: forge.pki.oids.contentType, value: forge.pki.oids.data },
       { type: forge.pki.oids.messageDigest },
-      { type: forge.pki.oids.signingTime, value: new Date() }
+      { type: forge.pki.oids.signingTime, value: new Date() },
     ],
     certificate: certObj,
     digestAlgorithm: forge.pki.oids.sha256,
-    key: keyObj
+    key: keyObj,
   });
 
   p7.sign();
@@ -234,7 +247,7 @@ Afip.prototype.CreateServiceTA = async function (service) {
   // Crear cliente SOAP WSAA (usa wsaa.wsdl local)
   const soapClient = await soap.createClientAsync(this.WSAA_WSDL, {
     disableCache: true,
-    endpoint: this.WSAA_URL
+    endpoint: this.WSAA_URL,
   });
 
   // LoginCms
@@ -246,7 +259,10 @@ Afip.prototype.CreateServiceTA = async function (service) {
   const taFilePath = this._taFilePath(service);
 
   // Guardar cache TA
-  await fs.promises.writeFile(taFilePath, JSON.stringify(res.loginticketresponse));
+  await fs.promises.writeFile(
+    taFilePath,
+    JSON.stringify(res.loginticketresponse),
+  );
 };
 
 /**
@@ -262,17 +278,27 @@ Afip.prototype.WebService = function (service, options = {}) {
 // Métodos que dependían del proxy de afipsdk.com (los deshabilitamos explícitamente)
 // =======
 Afip.prototype.getLastRequestXML = async function () {
-  throw new Error("getLastRequestXML no disponible en fork directo (sin app.afipsdk.com).");
+  throw new Error(
+    "getLastRequestXML no disponible en fork directo (sin app.afipsdk.com).",
+  );
 };
 Afip.prototype.CreateCert = async function () {
-  throw new Error("CreateCert no disponible en fork directo (sin app.afipsdk.com).");
+  throw new Error(
+    "CreateCert no disponible en fork directo (sin app.afipsdk.com).",
+  );
 };
 Afip.prototype.CreateWSAuth = async function () {
-  throw new Error("CreateWSAuth no disponible en fork directo (sin app.afipsdk.com).");
+  throw new Error(
+    "CreateWSAuth no disponible en fork directo (sin app.afipsdk.com).",
+  );
 };
 Afip.prototype.CreateAutomation = async function () {
-  throw new Error("CreateAutomation no disponible en fork directo (sin app.afipsdk.com).");
+  throw new Error(
+    "CreateAutomation no disponible en fork directo (sin app.afipsdk.com).",
+  );
 };
 Afip.prototype.GetAutomationDetails = async function () {
-  throw new Error("GetAutomationDetails no disponible en fork directo (sin app.afipsdk.com).");
+  throw new Error(
+    "GetAutomationDetails no disponible en fork directo (sin app.afipsdk.com).",
+  );
 };
