@@ -8,12 +8,11 @@ module.exports = class RegisterInscriptionProof extends AfipWebService {
     const options = {
       soapV12: false,
 
-      URL: "https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA5",
-      URL_TEST: "https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA5",
-
-      // WSDL remoto
       WSDL: "https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA5?WSDL",
+      URL:  "https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA5",
+
       WSDL_TEST: "https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA5?WSDL",
+      URL_TEST:  "https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA5",
 
       afip,
     };
