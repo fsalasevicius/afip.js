@@ -1,131 +1,135 @@
-const path = require('path');
+"use strict";
 
+const soap = require("soap");
 
 /**
- * Base class for AFIP web services 
- **/ 
+ * Base class for AFIP web services (DIRECT SOAP, no proxy)
+ */
 module.exports = class AfipWebService {
-	constructor(webServiceOptions, options = {}){
-		if (!webServiceOptions) {
-			throw new Error('Missing Web Service Object');
-		}
-		
-		/**
-		 * Force to use SOAP Client version 1.2
-		 *
-		 * @var boolean
-		 **/
-		this.soapv12 = webServiceOptions.soapV12 || false;
+  constructor(webServiceOptions, options = {}) {
+    if (!webServiceOptions) throw new Error("Missing Web Service Object");
 
-		/**
-		 * File name for the Web Services Description Language
-		 *
-		 * @var string
-		 **/
-		this.WSDL = webServiceOptions.WSDL;
-		
-		/**
-		 * The url to web service
-		 *
-		 * @var string
-		 **/
-		this.URL = webServiceOptions.URL;
+    this.soapv12 = webServiceOptions.soapV12 || false;
 
-		/**
-		 * File name for the Web Services Description 
-		 * Language in test mode
-		 *
-		 * @var string
-		 **/
-		this.WSDL_TEST = webServiceOptions.WSDL_TEST;
+    this.WSDL = webServiceOptions.WSDL;
+    this.URL = webServiceOptions.URL;
 
-		/**
-		 * The url to web service in test mode
-		 *
-		 * @var string
-		 **/
-		this.URL_TEST = webServiceOptions.URL_TEST;
-		
-		/**
-		 * The Afip parent Class
-		 *
-		 * @var Afip
-		 **/
-		this.afip = webServiceOptions.afip;
-		
-		/**
-		 * Options
-		 * 
-		 * @var object
-		 **/
-		this.options = options;
+    this.WSDL_TEST = webServiceOptions.WSDL_TEST;
+    this.URL_TEST = webServiceOptions.URL_TEST;
 
-		if (options['WSDL']) {
-			this.WSDL = options['WSDL'];
-		}
+    this.afip = webServiceOptions.afip;
+    this.options = options;
 
-		if (options['URL']) {
-			this.URL = options['URL'];
-		}
+    if (options["WSDL"]) this.WSDL = options["WSDL"];
+    if (options["URL"]) this.URL = options["URL"];
+    if (options["WSDL_TEST"]) this.WSDL_TEST = options["WSDL_TEST"];
+    if (options["URL_TEST"]) this.URL_TEST = options["URL_TEST"];
 
-		if (options['WSDL_TEST']) {
-			this.WSDL_TEST = options['WSDL_TEST'];
-		}
+    // modo generic
+    if (options["generic"] === true) {
+      if (typeof options["service"] === "undefined") {
+        throw new Error("service field is required in options");
+      }
 
-		if (options['URL_TEST']) {
-			this.URL_TEST = options['URL_TEST'];
-		}
+      if (typeof options["soapV1_2"] === "undefined") {
+        options["soapV1_2"] = true;
+      }
 
-		if (options['generic'] === true) {
-			if (typeof options['service'] === 'undefined') {
-				throw new Error("service field is required in options");
-			}
+      this.soapv12 = options["soapV1_2"];
+    }
+  }
 
-			if (typeof options['soapV1_2'] === 'undefined') {
-				options['soapV1_2'] = true;
-			}
+  /**
+   * Get Token Authorization from WSAA
+   */
+  async getTokenAuthorization(force = false) {
+    return this.afip.GetServiceTA(this.options["service"], force);
+  }
 
-			this.soapv12 = options['soapV1_2']
-		}
-	}
+  /**
+   * Resolve WSDL/URL by environment
+   */
+  _getWsdlUrl() {
+    const prod = this.afip.options["production"] === true;
 
-	/**
-	 * Get Web Service Token Authorization from WSAA
-	 * 
-	 * @param {boolean} force Force to create a new token 
-	 * authorization even if it is not expired
-	 * 
-	 * @throws Error if an error occurs
-	 *
-	 * @return TokenAuthorization Token Authorization for AFIP Web Service 
-	 **/
-	async getTokenAuthorization(force = false)
-	{
-		return this.afip.GetServiceTA(this.options['service'], force);
-	}
+    const wsdl = prod ? this.WSDL : this.WSDL_TEST;
+    const url = prod ? this.URL : this.URL_TEST;
 
-	/**
-	 * Send request to AFIP servers
-	 * 
-	 * @param {string} method SOAP operation to execute 
-	 * @param {any} params Parameters to send
-	 **/
-	async executeRequest(method, params = {}) {
-		// Prepare data to for request
-		const data = {
-			method,
-			params,
-			environment: this.afip.options['production'] === true ? "prod" : "dev",
-			wsid: this.options['service'],
-			url: this.afip.options['production'] === true ? this.URL : this.URL_TEST,
-			wsdl: this.afip.options['production'] === true ? this.WSDL : this.WSDL_TEST,
-			soap_v_1_2: this.soapv12
-		};
+    if (!wsdl) throw new Error("WSDL not configured for this service");
+    if (!url) throw new Error("URL not configured for this service");
 
-		// Execute request
-		const result = await this.afip.AdminClient.post('v1/afip/requests', data);
+    return { wsdl, url };
+  }
 
-		//Return response
-		return result.data;
-	}
-}
+  /**
+   * Create SOAP client (cached per instance)
+   */
+  async _getSoapClient() {
+    if (this._soapClient) return this._soapClient;
+
+    const { wsdl, url } = this._getWsdlUrl();
+
+    // soap lib: WSDL puede ser ruta local o URL remota
+    const client = await soap.createClientAsync(wsdl, {
+      disableCache: true,
+      endpoint: url
+    });
+
+    // SOAP 1.2 si aplica
+    if (this.soapv12 && typeof client.setSOAPAction === "function") {
+      // soap package maneja 1.2 con headers; no siempre hace falta setSOAPAction
+      // pero lo dejamos sin romper.
+    }
+
+    this._soapClient = client;
+    return client;
+  }
+
+  /**
+   * Execute SOAP request against AFIP (direct)
+   *
+   * @param {string} method SOAP operation name (ej: FECAESolicitar)
+   * @param {any} params Parameters object to send
+   */
+  async executeRequest(method, params = {}) {
+    const client = await this._getSoapClient();
+
+    // Auth from WSAA
+    const { token, sign } = await this.getTokenAuthorization(false);
+
+    // AFIP uses { Auth: { Token, Sign, Cuit } } in many services (WSFE, etc.)
+    // BUT some padron services might not use exactly the same wrapper.
+    // The SDK's specific classes usually build the correct envelope.
+    // So we only "inject" Auth when it's not already present.
+    const cuit = Number(this.afip.options["CUIT"]);
+
+    let finalParams = params;
+
+    // Si el método espera Auth y no lo trae, lo agregamos arriba.
+    // (Clases WSFE suelen pasar { Auth, ... } o { Auth: {...}, FeCAEReq: {...} })
+    if (finalParams && typeof finalParams === "object" && !finalParams.Auth && !finalParams.auth) {
+      finalParams = {
+        Auth: { Token: token, Sign: sign, Cuit: cuit },
+        ...finalParams
+      };
+    } else if (finalParams.auth && !finalParams.Auth) {
+      // normalización por si alguna clase usa "auth"
+      finalParams = {
+        Auth: finalParams.auth,
+        ...finalParams
+      };
+      delete finalParams.auth;
+    }
+
+    // Llamada SOAP
+    const fn = client[`${method}Async`];
+    if (typeof fn !== "function") {
+      // ayudar a debug: listar algunas ops
+      const ops = Object.keys(client).filter(k => k.endsWith("Async")).slice(0, 30);
+      throw new Error(`SOAP method not found: ${method}. Available (sample): ${ops.join(", ")}`);
+    }
+
+    const [result] = await fn.call(client, finalParams);
+    return result;
+  }
+};
