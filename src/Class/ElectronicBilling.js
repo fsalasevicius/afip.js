@@ -1,6 +1,6 @@
 const AfipWebService = require("./AfipWebService");
 const AfipWebServiceError = require("./AfipWebServiceError");
-
+const path = require("path");
 /**
  * SDK for AFIP Electronic Billing (wsfe1)
  *
