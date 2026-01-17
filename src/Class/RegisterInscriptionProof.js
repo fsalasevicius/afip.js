@@ -7,108 +7,77 @@ module.exports = class RegisterInscriptionProof extends AfipWebService {
   constructor(afip) {
     const options = {
       soapV12: false,
-      WSDL: "ws_sr_padron_a5-production.wsdl",
+
       URL: "https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA5",
-      WSDL_TEST: "ws_sr_padron_a5.wsdl",
-      URL_TEST:
-        "https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA5",
+      URL_TEST: "https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA5",
+
+      // WSDL remoto
+      WSDL: "https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA5?WSDL",
+      WSDL_TEST: "https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA5?WSDL",
+
       afip,
     };
 
     super(options, { service: "ws_sr_constancia_inscripcion" });
   }
-  /**
-   * Asks to web service for servers status {@see WS
-   * Specification item 3.1}
-   *
-   * @return object { appserver : Web Service status,
-   * dbserver : Database status, authserver : Autentication
-   * server status}
-   **/
+
   async getServerStatus() {
     return this.executeRequest("dummy");
   }
 
-  /**
-   * Asks to web service for taxpayer details {@see WS
-   * Specification item 3.2}
-   *
-   * @throws Exception if exists an error in response
-   *
-   * @return object|null if taxpayer does not exists, return null,
-   * if it exists, returns full response {@see
-   * WS Specification item 3.2.2}
-   **/
   async getTaxpayerDetails(identifier) {
-    // Get token and sign
-    let { token, sign } = await this.afip.GetServiceTA(
-      "ws_sr_constancia_inscripcion",
-    );
+    const { token, sign } = await this.getTokenAuthorization();
 
-    // Prepare SOAP params
-    let params = {
+    const params = {
       token,
       sign,
       cuitRepresentada: this.afip.CUIT,
       idPersona: identifier,
     };
+
     try {
       return await this.executeRequest("getPersona_v2", params);
     } catch (err) {
-      // AFIP suele usar código 602 para "no existe"
       if (err?.code === 602) return null;
       if (/no existe/i.test(err?.message || "")) return null;
       throw err;
     }
   }
 
-  /**
-   * Asks to web service for taxpayers details
-   *
-   * @throws Exception if exists an error in response
-   *
-   * @return [object] returns web service full response
-   **/
   async getTaxpayersDetails(identifiers) {
-    // Get token and sign
-    let { token, sign } = await this.afip.GetServiceTA(
-      "ws_sr_constancia_inscripcion",
-    );
+    const { token, sign } = await this.getTokenAuthorization();
 
-    // Prepare SOAP params
-    let params = {
+    const params = {
       token,
       sign,
       cuitRepresentada: this.afip.CUIT,
       idPersona: identifiers,
     };
 
-  
     const res = await this.executeRequest("getPersonaList_v2", params);
-
-    // normaliza salida: siempre array
     const out = res?.persona;
     if (!out) return [];
     return Array.isArray(out) ? out : [out];
   }
 
-  /**
-   * Send request to AFIP servers
-   *
-   * @param operation SOAP operation to execute
-   * @param params Parameters to send
-   *
-   * @return mixed Operation results
-   **/
   async executeRequest(operation, params = {}) {
-    const results = await super.executeRequest(operation, params);
+    const result = await super.executeRequest(operation, params);
 
-    return results[
+    // soporta ambas variantes: {personaReturn} o {return:{personaReturn}}
+    const direct =
       operation === "getPersona_v2"
-        ? "personaReturn"
+        ? result?.personaReturn
         : operation === "getPersonaList_v2"
-          ? "personaListReturn"
-          : "return"
-    ];
+          ? result?.personaListReturn
+          : result?.return;
+
+    const wrapped =
+      operation === "getPersona_v2"
+        ? result?.return?.personaReturn
+        : operation === "getPersonaList_v2"
+          ? result?.return?.personaListReturn
+          : null;
+
+    return direct ?? wrapped ?? result?.return ?? result;
   }
 };
