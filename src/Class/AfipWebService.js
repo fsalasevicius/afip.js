@@ -25,16 +25,13 @@ module.exports = class AfipWebService {
     if (options["WSDL_TEST"]) this.WSDL_TEST = options["WSDL_TEST"];
     if (options["URL_TEST"]) this.URL_TEST = options["URL_TEST"];
 
-    // modo generic
     if (options["generic"] === true) {
       if (typeof options["service"] === "undefined") {
         throw new Error("service field is required in options");
       }
-
       if (typeof options["soapV1_2"] === "undefined") {
         options["soapV1_2"] = true;
       }
-
       this.soapv12 = options["soapV1_2"];
     }
   }
@@ -72,7 +69,7 @@ module.exports = class AfipWebService {
     // soap lib: WSDL puede ser ruta local o URL remota
     const client = await soap.createClientAsync(wsdl, {
       disableCache: true,
-      endpoint: url
+      endpoint: url,
     });
 
     // SOAP 1.2 si aplica
@@ -94,42 +91,17 @@ module.exports = class AfipWebService {
   async executeRequest(method, params = {}) {
     const client = await this._getSoapClient();
 
-    // Auth from WSAA
-    const { token, sign } = await this.getTokenAuthorization(false);
-
-    // AFIP uses { Auth: { Token, Sign, Cuit } } in many services (WSFE, etc.)
-    // BUT some padron services might not use exactly the same wrapper.
-    // The SDK's specific classes usually build the correct envelope.
-    // So we only "inject" Auth when it's not already present.
-    const cuit = Number(this.afip.options["CUIT"]);
-
-    let finalParams = params;
-
-    // Si el método espera Auth y no lo trae, lo agregamos arriba.
-    // (Clases WSFE suelen pasar { Auth, ... } o { Auth: {...}, FeCAEReq: {...} })
-    if (finalParams && typeof finalParams === "object" && !finalParams.Auth && !finalParams.auth) {
-      finalParams = {
-        Auth: { Token: token, Sign: sign, Cuit: cuit },
-        ...finalParams
-      };
-    } else if (finalParams.auth && !finalParams.Auth) {
-      // normalización por si alguna clase usa "auth"
-      finalParams = {
-        Auth: finalParams.auth,
-        ...finalParams
-      };
-      delete finalParams.auth;
-    }
-
-    // Llamada SOAP
     const fn = client[`${method}Async`];
     if (typeof fn !== "function") {
-      // ayudar a debug: listar algunas ops
-      const ops = Object.keys(client).filter(k => k.endsWith("Async")).slice(0, 30);
-      throw new Error(`SOAP method not found: ${method}. Available (sample): ${ops.join(", ")}`);
+      const ops = Object.keys(client)
+        .filter((k) => k.endsWith("Async"))
+        .slice(0, 40);
+      throw new Error(
+        `SOAP method not found: ${method}. Available (sample): ${ops.join(", ")}`,
+      );
     }
 
-    const [result] = await fn.call(client, finalParams);
+    const [result] = await fn.call(client, params);
     return result;
   }
 };

@@ -6,18 +6,20 @@ const AfipWebService = require('./AfipWebService');
  * @link https://docs.afipsdk.com/
  **/
 module.exports = class RegisterScopeThirteen extends AfipWebService {
-	constructor(afip){
-		const options = {
-			soapV12: false,
-			WSDL: 'ws_sr_padron_a13-production.wsdl',
-			URL: 'https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA13',
-			WSDL_TEST: 'ws_sr_padron_a13.wsdl',
-			URL_TEST: 'https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA13',
-			afip
-		}
+  constructor(afip) {
+    const RES = afip?.RES_FOLDER || path.resolve(__dirname, "..", "Afip_res");
 
-		super(options, { service: 'ws_sr_padron_a13' });
-	}
+    const options = {
+      soapV12: false,
+      WSDL: path.resolve(RES, "ws_sr_padron_a13-production.wsdl"),
+      URL: "https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA13",
+      WSDL_TEST: path.resolve(RES, "ws_sr_padron_a13.wsdl"),
+      URL_TEST: "https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA13",
+      afip
+    };
+
+    super(options, { service: "ws_sr_padron_a13" });
+  }
 	/**
 	 * Asks to web service for servers status {@see WS 
 	 * Specification item 3.1}
