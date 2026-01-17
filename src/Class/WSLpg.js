@@ -8,10 +8,10 @@ module.exports = class WSLpg extends AfipWebService {
   constructor(afip) {
     const options = {
       soapV12: false,
-      WSDL: "wslpg-production.wsdl",
-      URL: "https://REEMPLAZAR_PROD_URL",
+      WSDL: "wslpg.wsdl",
+      URL: "https://serviciosjava.afip.gob.ar/wslpg/LpgService",
       WSDL_TEST: "wslpg.wsdl",
-      URL_TEST: "https://REEMPLAZAR_HOMO_URL",
+      URL_TEST: "https://fwshomo.afip.gov.ar/wslpg/LpgService",
       afip,
     };
 

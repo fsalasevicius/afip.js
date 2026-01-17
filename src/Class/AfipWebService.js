@@ -1,12 +1,12 @@
 "use strict";
-
+const path = require("path");
 const soap = require("soap");
 
 /**
  * Base class for AFIP web services (DIRECT SOAP, no proxy)
  */
 module.exports = class AfipWebService {
-  constructor(webServiceOptions, options = {}) {
+ constructor(webServiceOptions, options = {}) {
     if (!webServiceOptions) throw new Error("Missing Web Service Object");
 
     this.soapv12 = webServiceOptions.soapV12 || false;
@@ -20,20 +20,20 @@ module.exports = class AfipWebService {
     this.afip = webServiceOptions.afip;
     this.options = options;
 
-    if (options["WSDL"]) this.WSDL = options["WSDL"];
-    if (options["URL"]) this.URL = options["URL"];
-    if (options["WSDL_TEST"]) this.WSDL_TEST = options["WSDL_TEST"];
-    if (options["URL_TEST"]) this.URL_TEST = options["URL_TEST"];
+    if (options.WSDL) this.WSDL = options.WSDL;
+    if (options.URL) this.URL = options.URL;
+    if (options.WSDL_TEST) this.WSDL_TEST = options.WSDL_TEST;
+    if (options.URL_TEST) this.URL_TEST = options.URL_TEST;
 
-    if (options["generic"] === true) {
-      if (typeof options["service"] === "undefined") {
+    if (options.generic === true) {
+      if (typeof options.service === "undefined") {
         throw new Error("service field is required in options");
       }
-      if (typeof options["soapV1_2"] === "undefined") {
-        options["soapV1_2"] = true;
-      }
-      this.soapv12 = options["soapV1_2"];
+      if (typeof options.soapV1_2 === "undefined") options.soapV1_2 = true;
+      this.soapv12 = options.soapV1_2;
     }
+
+    this._clientCache = new Map();
   }
 
   /**
